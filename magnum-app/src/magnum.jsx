@@ -48,6 +48,8 @@ class AudioEngine {
     Tone.getTransport().swingSubdivision = "16n";
 
     this._masterGain = new Tone.Gain(1).toDestination();
+    this._recorder = new Tone.Recorder();
+    this._masterGain.connect(this._recorder);
 
     // Kick: Deep & punchy with ghost note
     this.layers.kick = new Tone.MembraneSynth({
@@ -206,6 +208,16 @@ class AudioEngine {
     });
   }
 
+  async recordLoop(ms = 15000) {
+    this._recorder.start();
+    return new Promise((resolve) => {
+      setTimeout(async () => {
+        const blob = await this._recorder.stop();
+        resolve(blob);
+      }, ms);
+    });
+  }
+
   _fire(layer, step) { this._cbs.forEach((cb) => cb(layer, step)); }
   onStep(cb) { this._cbs.push(cb); }
   dispose() {
@@ -213,6 +225,7 @@ class AudioEngine {
       Tone.getTransport().stop();
       Object.values(this.loops).forEach((l) => l?.dispose());
       Object.values(this.layers).forEach((l) => l?.dispose());
+      this._recorder?.dispose();
     } catch (e) {}
   }
 }
@@ -570,6 +583,8 @@ export default function MagnumBeatBuilder() {
   const [stepPatterns, setStepPatterns] = useState({});
   const [transitioning, setTransitioning] = useState(false);
   const [dropping, setDropping] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [downloadUrl, setDownloadUrl] = useState(null);
   const audioRef = useRef(null);
 
   useEffect(() => {
@@ -623,6 +638,12 @@ export default function MagnumBeatBuilder() {
     setActiveLayers((p) => [...new Set([...p, "drop"])]);
     setStepPatterns((p) => ({ ...p, drop: audioRef.current.activeSteps.drop }));
     setTimeout(() => setAnimating(false), 600);
+    setRecording(true);
+    audioRef.current.recordLoop(15000).then((blob) => {
+      const url = URL.createObjectURL(blob);
+      setDownloadUrl(url);
+      setRecording(false);
+    });
   };
 
   const titleStyle = {
@@ -734,10 +755,38 @@ export default function MagnumBeatBuilder() {
               Now Playing — Your Magnum Beat
             </span>
           </div>
+          <div style={{ marginTop: 16, animation: "fadeUp 0.7s ease 0.6s both" }}>
+            {recording ? (
+              <div style={{
+                display: "inline-flex", alignItems: "center", gap: 8,
+                padding: "10px 24px", borderRadius: 28,
+                border: `1px solid ${C.goldDim}44`, background: `${C.surface}cc`,
+                fontFamily: "'Cormorant Garamond',Georgia,serif",
+                fontSize: 11, letterSpacing: "0.2em", color: C.goldDim, textTransform: "uppercase",
+              }}>
+                <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#d94060", animation: "recPulse 1s ease infinite" }} />
+                Recording beat…
+              </div>
+            ) : downloadUrl ? (
+              <a href={downloadUrl} download="magnum-beat.webm" style={{ textDecoration: "none" }}>
+                <button style={{
+                  padding: "13px 36px", borderRadius: 36,
+                  border: `1px solid ${C.gold}`,
+                  background: `linear-gradient(135deg, ${C.gold}, ${C.goldDim})`,
+                  color: C.bg, fontSize: 13,
+                  fontFamily: "'Cormorant Garamond',Georgia,serif",
+                  fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase",
+                  cursor: "pointer", boxShadow: `0 4px 24px ${C.gold}44`,
+                }}>
+                  ↓ Download Beat
+                </button>
+              </a>
+            ) : null}
+          </div>
           <p style={{
             fontFamily: "'Cormorant Garamond',Georgia,serif", fontSize: 11,
             color: C.muted, letterSpacing: "0.18em", textTransform: "uppercase",
-            marginTop: 12, animation: "fadeUp 0.7s ease 0.6s both",
+            marginTop: 10, animation: "fadeUp 0.7s ease 0.9s both",
           }}>Made with Magnum</p>
         </div>
       )}
@@ -746,6 +795,7 @@ export default function MagnumBeatBuilder() {
         @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
         @keyframes flashIn{0%{opacity:1}100%{opacity:0}}
         @keyframes riserBar{0%{width:30px;opacity:0.5}100%{width:120px;opacity:0}}
+        @keyframes recPulse{0%,100%{opacity:1}50%{opacity:0.3}}
       `}</style>
     </div>,
   ];
